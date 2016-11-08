@@ -1,6 +1,5 @@
 # Cordova Health Plugin
 
-
 A plugin that abstracts fitness and health repositories like Apple HealthKit or Google Fit.
 
 This work is based on [cordova plugin googlefit](https://github.com/2dvisio/cordova-plugin-googlefit) and on [cordova healthkit plugin](https://github.com/Telerik-Verified-Plugins/HealthKit)
@@ -23,11 +22,12 @@ cordova plugin add cordova-plugin-health
 
 * Make sure your app id has the 'HealthKit' entitlement when this plugin is installed (see iOS dev center).
 * Also, make sure your app and AppStore description complies with these Apple review guidelines: https://developer.apple.com/app-store/review/guidelines/#healthkit
+* There are [two keys](https://developer.apple.com/library/content/documentation/General/Reference/InfoPlistKeyReference/Articles/CocoaKeys.html#//apple_ref/doc/uid/TP40009251-SW48) to the info.plist file, `NSHealthShareUsageDescription` and `NSHealthUpdateUsageDescription` that are assigned with an empty string by default by the plugin. You may want to put a better description there.
 
 ## Requirements for Android apps
 
 * You need to have the Google Services API downloaded in your SDK
-* Be sure to give your app access to the Google Fitness API, see [this](https://developers.google.com/fit/android/get-started) and [this](https://github.com/2dvisio/cordova-plugin-googlefit#sdk-requirements-for-compiling-the-plugin)
+* Be sure to give your app access to the Google Fitness API, see [this](https://developers.google.com/fit/android/get-api-key) and [this](https://github.com/2dvisio/cordova-plugin-googlefit#sdk-requirements-for-compiling-the-plugin)
 * If you are wondering what key your compiled app is using, you can type `keytool -list -printcert -jarfile yourapp.apk`
 
 Some more detailed instructions are provided [here](https://github.com/2dvisio/cordova-plugin-googlefit)
@@ -85,10 +85,16 @@ navigator.health.isAvailable(successCallback, errorCallback)
 - successCallback: {type: function(available)}, if available a true is passed as argument, false otherwise
 - errorCallback: {type: function(err)}, called if something went wrong, err contains a textual description of the problem
 
+Quirks of isAvailable()
+
+- In Android, it checks both if recent Google Play Services and Google Fit are installed. If the play services are not installed, or are obsolete, it will show a pop-up suggesting to download them. If Google Fit is not installed, it will open the Play Store at the location of the Google Fit app. The plugin does not wait until the missing packages are installed, it will return immediately.
+
 ### requestAuthorization()
 
 Requests read and write access to a set of data types.
-This function should be called first in your application.
+It is recommendable to always explain why the app needs access to the data before asking the user to authorise it.
+
+This function must be called before using the query and store functions, even if the authorisation has already been given at some point in the past.
 
 ```
 navigator.health.requestAuthorization(datatypes, successCallback, errorCallback)
@@ -97,6 +103,12 @@ navigator.health.requestAuthorization(datatypes, successCallback, errorCallback)
 - datatypes: {type: Array of String}, a list of data types you want to be granted access to
 - successCallback: {type: function}, called if all OK
 - errorCallback: {type: function(err)}, called if something went wrong, err contains a textual description of the problem
+
+Quirks of requestAuthorization()
+
+- In Android, it will try to get authorisation from the Google Fit APIs. It is necessary that the app's package name and the signing key are registered in the Google API console (see [here](https://developers.google.com/fit/android/get-api-key)).
+- In Android, be aware that if the activity is destroyed (e.g. after a rotation) or is put in background, the connection to Google Fit may be lost without any callback. Going through the autorisation will ensure that the app is connected again.
+- In Android 6 and over, this function will also ask for some dynamic permissions if needed (e.g. in the case of "distance", it will need access to ACCESS_FINE_LOCATION).
 
 ### query()
 
@@ -115,32 +127,38 @@ navigator.health.query({
 - startDate: {type: Date}, start date from which to get data
 - endDate: {type: Date}, end data to which to get the data
 - dataType: {type: String}, the data type to be queried (see above)
-- successCallback: {type: function(data) }, called if all OK, data contains the result of the query in the form of an array of: { startDate: Date, endDate: Date, value: xxx, unit: 'xxx', source: "xxx" }   - errorCallback: {type: function(err)}, called if something went wrong, err contains a textual description of the problem
+- successCallback: {type: function(data) }, called if all OK, data contains the result of the query in the form of an array of: { startDate: Date, endDate: Date, value: xxx, unit: 'xxx', sourceName: '', sourceBundleId: '' }
+- errorCallback: {type: function(err)}, called if something went wrong, err contains a textual description of the problem
 
 
 Quirks of query()
 
-- in Google Fit calories.basal is returned as an average per day, and usually is not available in all days (may be not available in time windows smaller than 5 days or more). There is an aggregated query for basal calories, but it doesn't work (see [this bug report](https://plus.google.com/+DarioSalviWork/posts/7bKkUBrdAYV).
-- in Google Fit calories.active is computed by subtracting the basal from the total, as basal an average of the a number of days before endDate is taken (the actual number is defined in a variable, currently set to 100). The reason for this time window to be so big is because basal data points are very scarce and we need a large window to be sure to get at least one samples. If no data points are found even in the 100 days window, an error is raised.
-- when querying for activities, Google Fit is able to determine some activities automatically, while HealthKit only relies on the input of the user or of some external app
+- in Google Fit calories.basal is returned as an average per day, and usually is not available in all days (may be not available in time windows smaller than 5 days or more)
+- in Google Fit calories.active is computed by subtracting the basal from the total, as basal an average of the a number of days before endDate is taken (the actual number is defined in a variable, currently set to 7)
 - while Google Fit calculates basal and active calories automatically, HealthKit needs an explicit input
+- when querying for activities, Google Fit is able to determine some activities automatically, while HealthKit only relies on the input of the user or of some external app
+- when querying for activities, calories and distance are also provided in HealthKit (units are kcal and metres) and never in Google Fit
+
 
 ### queryAggregated()
 
 Gets aggregated data in a certain time window.
+Usually the sum is returned for the given quantity.
 
 ```
 navigator.health.queryAggregated({
         startDate: new Date(new Date().getTime() - 3 * 24 * 60 * 60 * 1000), // three days ago
         endDate: new Date(), // now
-        dataType: 'steps'
+        dataType: 'steps',
+        bucket: 'day'
         }, successCallback, errorCallback)
 ```
 
 - startDate: {type: Date}, start date from which to get data
 - endDate: {type: Date}, end data to which to get the data
 - dataType: {type: String}, the data type to be queried (see below for supported data types)
-- successCallback: {type: function(data) }, called if all OK, data contains the result of the query, see below for returned data types
+- bucket: {type: String}, if specified, aggregation is grouped an array of "buckets" (windows of time), supported values are: 'hour', 'day', 'week', 'month', 'year'
+- successCallback: {type: function(data)}, called if all OK, data contains the result of the query, see below for returned data types
 - errorCallback: {type: function(err)}, called if something went wrong, err contains a textual description of the problem
 
 Not all data types are supported for aggregated queries.
@@ -153,11 +171,12 @@ The following table shows what types are supported and examples of aggregated da
 | calories        | { startDate: Date, endDate: Date, value: 25698.1, unit: 'kcal' } |
 | calories.active | { startDate: Date, endDate: Date, value: 3547.4, unit: 'kcal' } |
 | calories.basal  | { startDate: Date, endDate: Date, value: 13146.1, unit: 'kcal' } |
-| activity        | { startDate: Date, endDate: Date, value: { still: { duration: 520000, calories: 30, distance: 0 }, walking: { duration: 223000, calories: 20, distance: 15 }}, unit: 'activitySummary' } (note: duration is expressed in milliseconds, distance in meters and calories in kcal) |
+| activity        | { startDate: Date, endDate: Date, value: { still: { duration: 520000, calories: 30, distance: 0 }, walking: { duration: 223000, calories: 20, distance: 15 }}, unit: 'activitySummary' } (note: duration is expressed in milliseconds, distance in metres and calories in kcal) |
 
 Quirks of queryAggregated()
 
 - when querying for activities, calories and distance are provided when available in HealthKit and never in Google Fit
+- in Android, the start and end dates returned are the date of the first and the last available samples. If no samples are found, start and end may not be set.
 
 ### store()
 
@@ -169,16 +188,19 @@ navigator.health.store({
 	endDate: new Date(),
 	dataType: 'steps',
 	value: 180,
-	source: 'my_app'}, successCallback, errorCallback)
+	sourceName: 'my_app',
+	sourceBundleId: 'com.example.my_app' }, successCallback, errorCallback)
 ```
 
 - startDate: {type: Date}, start date from which to get data
 - endDate: {type: Date}, end data to which to get the data
 - dataType: {type: a String}, the data type
 - value: {type: a number or an Object}, depending on the actual data type
-- source: {type: String}, the source that produced this data. In iOS this is ignored and set automatically to the name of your app.
+- sourceName: {type: String}, the source that produced this data. In iOS this is ignored and set automatically to the name of your app.
+- sourceBundleId: {type: String}, the complete package of the source that produced this data. In Android, if not specified, it's assigned to the package of the App. In iOS this is ignored and set automatically to the bunde id of the app.
 - successCallback: {type: function}, called if all OK
 - errorCallback: {type: function(err)}, called if something went wrong, err contains a textual description of the problem
+
 
 Quirks of store()
 
@@ -207,9 +229,10 @@ Quirks of store()
 
 short term
 
+- add query with buckets (see window.plugins.healthkit.querySampleTypeAggregated for HealthKit)
+- add delete
 - get steps from the "polished" Google Fit data source (see https://plus.google.com/104895513165544578271/posts/a8P62A6ejQy)
 - add support for HKCategory samples in HealthKit
-- refactor HealthKit.js to make it more understandable
 - extend the datatypes
  - blood pressure  (KCorrelationTypeIdentifierBloodPressure, custom data type)
  - food (HKCorrelationTypeIdentifierFood, TYPE_NUTRITION)
@@ -218,7 +241,7 @@ short term
 
 long term
 
-- add registration to updates
+- add registration to updates (in Fit:  HistoryApi#registerDataUpdateListener() )
 - store vital signs on an encrypted DB in the case of Android (possible choice: [sqlcipher](https://www.zetetic.net/sqlcipher/sqlcipher-for-android/))
 - add also Samsung Health as a health record for Android
 

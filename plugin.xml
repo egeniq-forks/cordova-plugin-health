@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
   id="cordova-plugin-health"
-  version="0.6.0">
+  version="0.7.0">
 
   <name>Cordova Health</name>
 
@@ -46,6 +46,22 @@
       </array>
     </config-file>
 
+	<!-- Usage description of Health, mandatory since iOS 10 -->
+    <config-file target="*-Info.plist" parent="NSHealthShareUsageDescription">
+      <string/>
+    </config-file>
+    <config-file target="*-Info.plist" parent="NSHealthUpdateUsageDescription">
+      <string/>
+    </config-file>
+
+    <!-- Usage description of Health, mandatory since iOS 10 -->
+    <config-file target="*-Info.plist" parent="NSHealthShareUsageDescription">
+      <string/>
+    </config-file>
+    <config-file target="*-Info.plist" parent="NSHealthUpdateUsageDescription">
+      <string/>
+    </config-file>
+
     <header-file src="src/ios/WorkoutActivityConversion.h"/>
     <source-file src="src/ios/WorkoutActivityConversion.m"/>
     <header-file src="src/ios/HKHealthStore+AAPLExtensions.h"/>
@@ -58,7 +74,7 @@
 
   <!-- android -->
   <platform name="android">
-    <framework src="com.google.android.gms:play-services-fitness:8+" />
+    <framework src="com.google.android.gms:play-services-fitness:9.4.0" />
 
     <config-file target="AndroidManifest.xml" parent="/*">
       <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
